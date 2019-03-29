@@ -1,0 +1,309 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>reveal.js</title>
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/white.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h2>The Chubby lock service</h2><h4>for loosely-coupled distributed systems</h4>
+				</section>
+				<section>
+					<h3>2006 was long time ago...</h3>
+
+					<img src="assets/aws_logo.png" alt="">
+					<img src="assets/Gmail_logo.png" alt="">
+					<img src="assets/internet-explorer-logo.jpg" alt="">
+					<img src="assets/firefox_logo.jpg" alt="">
+					<aside class="notes">
+							<ul>
+								<li>AWS has just launched it's first product - S3 (US Only)</li>
+								<li>Gmail is still in beta</li>
+								<li>IE6 is the king of the browsers (IE 7 just released)</li>
+								<li>Firefox has just released version 2.0</li>
+							</ul>
+					</aside>
+				</section>
+				<section>
+					<h2>Author: Mike Burrows</h2>
+					<img src="assets/mikeburrows.jpg"/>
+					<aside class="notes">
+						- Phd from University Cambridge
+						- One of creators of AltaVista (the then most popular search engine)
+						- Elected Fellow of Royal Society in 2003
+					</aside>
+				</section>
+				<section>
+					<blockquote>
+						"Building Chubby was <b>an engineering effort</b> required
+						to fill the needs mentioned above; it was not research.
+						<b>We claim no new algorithms or techniques. </b>"
+					</blockquote>
+				</section>
+				<section>
+					<blockquote>We describe our experiences with the Chubby <b>lock service</b>, which is intended to provide <b>coarse-grained</b> locking as well as reliable (though low-volume) storage for
+						a loosely-coupled distributed system.
+					</blockquote>
+					<blockquote>
+						"Building Chubby was <b>an engineering effort</b> required
+						to fill the needs mentioned above; it was not research.
+						<b>We claim no new algorithms or techniques. </b>"
+					</blockquote>
+				</section>
+				<section>
+					<h3>What's lock service? Why I need it?</h3>
+					<blockquote>
+						"The purpose of the lock service is to allow its clients
+						to synchronize their activities and to agree on basic information about their environment."
+					</blockquote>
+					<blockquote> "... to elect a master, to allow the
+						master to discover the servers it controls, and to permit
+						clients to find the master"</blockquote>
+				</section>
+
+				<section>
+					<h3>Why not just use Paxos?</h3>
+					<ul>
+						<li>Hard to retrofit to existing apps</li>
+						<li>You still need name service (e.g. to announce leader)</li>
+						<li>Lock-based interface is familiar to developers</li>
+						<li>Consensus is impractical with large clusters</li>
+					</ul>
+				</section>
+
+				<section>
+					<h3>Features:</h3>
+					<ul>
+						<li>Scalable advertising. </li>
+						<li>Event notifications. </li>
+						<li>Quick and consistent reads.</li>
+						<li><q>To avoid both financial loss and jail time, we provide
+							security mechanisms, including access control.</q></li>
+					</ul>
+					<aside class="notes">
+						<ul>
+							<li>Thousands of clients can watch the same file</li>
+							<li>I will tell you when the file is changed deleted etc.</li>
+							<li>You can read as many times as you want!</li>
+							<li>ACL's. This makes me chuckle every time i read it.</li>
+						</ul>
+					</aside>
+				</section>
+
+				<section>
+					<img src="assets/Chubby_architecture_1.png">
+					<aside class="notes">
+						<ul>
+							<li>Two main components: Server and Library</li>
+							<li>A Chubby cell usually contains 5 servers</li>
+							<li>Client connects ONLY to master</li>
+							<li>Writes are propagated via Consensus Protocol to replicas</li>
+							<li></li>
+						</ul>
+					</aside>
+				</section>
+				<section>
+					<h3>File and Directories</h3>
+					<pre>/ls/foo/wombat/pouch</pre>
+					<ul>
+						<li>ls - <i>locks service</i> prefix</li>
+						<li>foo - name of Chubby cell (resolved via DNS)</li>
+						<li>wombat/pouch - resolved within cell</li>
+					</ul>
+					<aside class="notes">
+						<ul>
+							<li>File system like path</li>
+							<li>ls - lock service preffix</li>
+							<li>foo - chubby cell name (resolved via DNS)</li>
+							<li>wombat/pouch - resolved inside cell</li>
+							<li>Files/ Directories - called nodes</li>
+							<li>No: symliks, moving files, directory modified times, directory level permissions - To make caching easier</li>
+						</ul>
+					</aside>
+				</section>
+				<section>
+					<h3>Node</h3>
+					<ul>
+						<li>Permanent</li>
+						<li>Ephemeral</li>
+					</ul>
+					<aside class="notes">
+						<p>Permanent as name suggests persists until deleted</p>
+						<p>Ephemeral - file exists as long as someone has open handle to it. Used for example to tell other clients that you are alive</p>
+					</aside>
+				</section>
+				<section>
+					<h3>Locks</h3>
+					<ul>
+						<li>Distributed locks are difficult
+						<p>
+							<q>a process holding a lock L may issue a request R, but then fail. Another process may acquire L and perform some action before R arrives at its
+								destination. If R later arrives, it may be acted on without
+								the protection of L, and potentially on inconsistent data</q>
+						</p></li>
+						<li>Sequencers</li>
+					</ul>
+					<aside class="notes">
+					</aside>
+
+				</section>
+				<section>
+					<h3>API</h3>
+					<pre>
+						<code class="java" data-trim >
+						handle = chubby.Open("/ls/foo/wombat/pouch")
+
+						handle.Acquire() // or TryAcquire()
+						sequencer = handle.GetSequencer()
+
+						// call some external service using Sequencer.
+
+						// when fail or done
+						handle.Release()
+							</code>
+ 					</pre>
+					<aside class="notes">
+					</aside>
+				</section>
+				<section>
+					<h3>Caching</h3>
+					<ul>
+						<li>Consistent</li>
+						<li>File, no file, meta-data, handles</li>
+
+						<li>Invalidation instead of Updates</li>
+						<li>Write invalidates caches</li>
+					</ul>
+					<aside class="notes">
+					</aside>
+				</section>
+				<section>
+					<h3>Sessions and Keep Alive</h3>
+					<ul>
+						<li>Lease based</li>
+						<li>Minimal communication (blocking RPC)</li>
+						<li>Cache invalidation</li>
+					</ul>
+				</section>
+				<section>
+					<img src="assets/fail-over.png" />
+				</section>
+				<section>
+					<h3>Scale</h3>
+					<ul>
+						<li>90,000 direct clients (!?!?!?!)</li>
+						<li>One Chubby cell per data center</li>
+					</ul>
+				</section>
+				<section>
+					<h3>Use and behaviour</h3>
+					<ul>
+						<li>Typical stats:</li>
+						<ul>
+							<li>22k direct clients</li>
+							<li>1k locks</li>
+							<li>RPC rate 1-2k/s (93% Keep Alives)</li>
+						</ul>
+					</ul>
+				</section>
+				<section>
+					<h3>Outages</h3>
+					<ul>
+						<li>61 outages over few weeks</li>
+						<ul>
+							<li>52 less that 30s</li>
+							<li>4 network maintenance</li>
+							<li>2 suspected network problems</li>
+							<li>2 software errors</li>
+							<li>1 overload</li>
+						</ul>
+						<li>Lost data 6 times</li>
+						<ul>
+							<li>4 software errors</li>
+							<li>2 operator error</li>
+						</ul>
+					</ul>
+					<aside class="notes">
+						"Ironically, the operational errors involved upgrades
+						to avoid the software errors."
+					</aside>
+				</section>
+				<section>
+					<h3>Abusive clients</h3>
+					<p>
+						<q>
+							Despite attempts at education, our developers regularly write loops that retry
+							indefinitely when a file is not present, or poll a file by
+							opening it and closing it repeatedly...
+						</q>
+					</p>
+					<p>
+						<q>... In the end it was easier to make
+							repeated Open() calls cheap</q>
+					</p>
+				</section>
+				<section>
+					<h3>Lessons learned</h3>
+					<ul>
+						<li>Developers rarely consider availability</li>
+						<li>Fine-grained locking could be ignored </li>
+						<li>RPC use affects transport protocol</li>
+					</ul>
+					<aside class="notes">
+						Developers are inclined to treat Chubby as always available which magnifies the blast radius
+						One of the teams initiated very expensive recovery every time new chubby master was elected ( 100's of machines)
+
+						- No one needed yet fine-grain locking service.
+						- Developers found that to optimize their application they need to reduce communication
+
+						- They had to switch KeepAlives to UDP because TCP has congestion avoidance which slows down the delivery of KeepAlives.
+					</aside>
+				</section>
+				<section>
+					<h3>What I love about this paper</h3>
+					<ul>
+						<li>Impossible design that works</li>
+						<li>Focus on ease of use</li>
+						<li></li>
+					</ul>
+				</section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+				]
+			});
+		</script>
+	</body>
+</html>
